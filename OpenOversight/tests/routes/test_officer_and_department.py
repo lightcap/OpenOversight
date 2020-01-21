@@ -4,18 +4,17 @@ import pytest
 import random
 from datetime import datetime
 from flask import url_for, current_app
-from ..conftest import AC_DEPT
-from OpenOversight.app.utils import dept_choices
+from ..conftest import AC_DEPT, ACTIVE_NON_AC_DEPT, INACTIVE_DEPT, INACTIVE_DEPT_NAME
+from OpenOversight.app.utils import all_dept_choices, active_dept_choices
 from OpenOversight.app.main.choices import RACE_CHOICES, GENDER_CHOICES
-from .route_helpers import login_admin, login_ac, process_form_data
+from .route_helpers import login_admin, login_ac, login_user, process_form_data, login_inactive_ac
 
 
-from OpenOversight.app.main.forms import (AssignmentForm, DepartmentForm,
-                                          AddOfficerForm, AddUnitForm,
-                                          EditOfficerForm, LinkForm,
-                                          EditDepartmentForm, IncidentForm,
+from OpenOversight.app.main.forms import (AssignmentForm, AddOfficerForm,
+                                          AddUnitForm, EditOfficerForm,
+                                          LinkForm, IncidentForm,
                                           LocationForm, LicensePlateForm,
-                                          BrowseForm, SalaryForm)
+                                          BrowseForm, SalaryForm, DepartmentForm)
 
 from OpenOversight.app.models import Department, Unit, Officer, Incident, Assignment, Salary, Job
 
@@ -330,129 +329,6 @@ def test_admin_cannot_add_duplicate_police_department(mockdata, client,
         assert department.short_name == 'TPD'
 
 
-def test_admin_can_edit_police_department(mockdata, client, session):
-    with current_app.test_request_context():
-        login_admin(client)
-
-        misspelled_form = DepartmentForm(name='Misspelled Police Department',
-                                         short_name='MPD')
-
-        misspelled_rv = client.post(
-            url_for('main.add_department'),
-            data=misspelled_form.data,
-            follow_redirects=True
-        )
-
-        assert 'New department' in misspelled_rv.data.decode('utf-8')
-
-        department = Department.query.filter_by(name='Misspelled Police Department').one()
-
-        corrected_form = EditDepartmentForm(name='Corrected Police Department',
-                                            short_name='MPD')
-
-        corrected_rv = client.post(
-            url_for('main.edit_department', department_id=department.id),
-            data=corrected_form.data,
-            follow_redirects=True
-        )
-
-        assert 'Department Corrected Police Department edited' in corrected_rv.data.decode('utf-8')
-
-        # Check the department with the new name is now in the database.
-        corrected_department = Department.query.filter_by(
-            name='Corrected Police Department').one()
-        assert corrected_department.short_name == 'MPD'
-
-        # Check that the old name is no longer present:
-        assert Department.query.filter_by(
-            name='Misspelled Police Department').count() == 0
-
-        edit_short_name_form = EditDepartmentForm(name='Corrected Police Department',
-                                                  short_name='CPD')
-
-        edit_short_name_rv = client.post(
-            url_for('main.edit_department', department_id=department.id),
-            data=edit_short_name_form.data,
-            follow_redirects=True
-        )
-
-        assert 'Department Corrected Police Department edited' in edit_short_name_rv.data.decode('utf-8')
-
-        edit_short_name_department = Department.query.filter_by(
-            name='Corrected Police Department').one()
-        assert edit_short_name_department.short_name == 'CPD'
-
-
-def test_ac_cannot_edit_police_department(mockdata, client, session):
-    with current_app.test_request_context():
-        login_ac(client)
-
-        department = Department.query.first()
-
-        form = EditDepartmentForm(name='Corrected Police Department',
-                                  short_name='CPD')
-
-        rv = client.post(
-            url_for('main.edit_department', department_id=department.id),
-            data=form.data,
-            follow_redirects=True
-        )
-
-        assert rv.status_code == 403
-
-
-def test_admin_cannot_duplicate_police_department_during_edit(mockdata, client,
-                                                              session):
-    with current_app.test_request_context():
-        login_admin(client)
-
-        existing_dep_form = DepartmentForm(name='Existing Police Department',
-                                           short_name='EPD')
-
-        existing_dep_rv = client.post(
-            url_for('main.add_department'),
-            data=existing_dep_form.data,
-            follow_redirects=True
-        )
-
-        assert 'New department' in existing_dep_rv.data.decode('utf-8')
-
-        new_dep_form = DepartmentForm(name='New Police Department',
-                                      short_name='NPD')
-
-        new_dep_rv = client.post(
-            url_for('main.add_department'),
-            data=new_dep_form.data,
-            follow_redirects=True
-        )
-
-        assert 'New department' in new_dep_rv.data.decode('utf-8')
-
-        new_department = Department.query.filter_by(
-            name='New Police Department').one()
-
-        edit_form = EditDepartmentForm(name='Existing Police Department',
-                                       short_name='EPD2')
-
-        rv = client.post(
-            url_for('main.edit_department', department_id=new_department.id),
-            data=edit_form.data,
-            follow_redirects=True
-        )
-
-        assert 'already exists' in rv.data.decode('utf-8')
-
-        # make sure original department is still here
-        existing_department = Department.query.filter_by(
-            name='Existing Police Department').one()
-        assert existing_department.short_name == 'EPD'
-
-        # make sure new department is left unchanged
-        new_department = Department.query.filter_by(
-            name='New Police Department').one()
-        assert new_department.short_name == 'NPD'
-
-
 def test_expected_dept_appears_in_submission_dept_selection(mockdata, client,
                                                             session):
     with current_app.test_request_context():
@@ -469,7 +345,7 @@ def test_expected_dept_appears_in_submission_dept_selection(mockdata, client,
 def test_admin_can_add_new_officer(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
-        department = random.choice(dept_choices())
+        department = random.choice(active_dept_choices())
         links = [
             LinkForm(url='http://www.pleasework.com', link_type='link').data,
             LinkForm(url='http://www.avideo/?v=2345jk', link_type='video').data
@@ -578,7 +454,7 @@ def test_ac_cannot_add_new_officer_not_in_their_dept(mockdata, client, session):
 def test_admin_can_edit_existing_officer(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
-        department = random.choice(dept_choices())
+        department = Department.query.first()
         link_url0 = 'http://pleasework.com'
         link_url1 = 'http://avideo/?v=2345jk'
         links = [
@@ -652,7 +528,7 @@ def test_ac_can_see_officer_not_in_their_dept(mockdata, client, session):
     with current_app.test_request_context():
         login_ac(client)
 
-        officer = Officer.query.except_(Officer.query.filter_by(department_id=AC_DEPT)).first()
+        officer = Officer.query.filter_by(department_id=ACTIVE_NON_AC_DEPT).first()
 
         rv = client.get(
             url_for('main.officer_profile', officer_id=officer.id),
@@ -726,7 +602,7 @@ def test_admin_adds_officer_without_middle_initial(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
 
-        department = random.choice(dept_choices())
+        department = random.choice(all_dept_choices())
         form = AddOfficerForm(first_name='Test',
                               last_name='McTesty',
                               race='WHITE',
@@ -758,7 +634,7 @@ def test_admin_adds_officer_with_letter_in_badge_no(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
 
-        department = random.choice(dept_choices())
+        department = random.choice(all_dept_choices())
         form = AddOfficerForm(first_name='Test',
                               last_name='Testersly',
                               middle_initial='T',
@@ -853,7 +729,7 @@ def test_ac_cannot_add_new_unit_not_in_their_dept(mockdata, client, session):
 def test_admin_can_add_new_officer_with_suffix(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
-        department = random.choice(dept_choices())
+        department = random.choice(all_dept_choices())
         links = [
             LinkForm(url='http://www.pleasework.com', link_type='link').data,
             LinkForm(url='http://www.avideo/?v=2345jk', link_type='video').data
@@ -892,7 +768,7 @@ def test_admin_can_add_new_officer_with_suffix(mockdata, client, session):
 def test_officer_csv(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
-        department = random.choice(dept_choices())
+        department = random.choice(all_dept_choices())
         links = [
             LinkForm(url='http://www.pleasework.com', link_type='link').data,
         ]
@@ -932,7 +808,7 @@ def test_officer_csv(mockdata, client, session):
 def test_incidents_csv(mockdata, client, session):
     with current_app.test_request_context():
         login_admin(client)
-        department = random.choice(dept_choices())
+        department = random.choice(all_dept_choices())
 
         # Delete existing incidents for chosen department
         Incident.query.filter_by(department_id=department.id).delete()
@@ -1340,4 +1216,200 @@ def test_get_department_ranks_with_no_department(mockdata, client, session):
         data = [x[1] for x in data]
         assert 'Commander' in data
 
-        assert data.count('Commander') == 2  # Once for each test department
+        num_depts = len(Department.query.all())
+        assert data.count('Commander') == num_depts  # Once for each test department
+
+
+def test_get_department_ranks_with_inactive_department_fails_for_anonymous_user(mockdata, client, session):
+    with current_app.test_request_context():
+        department = Department.query.filter_by(is_active=False).one()
+        rv = client.get(
+            url_for('main.get_dept_ranks', department_id=department.id),
+            follow_redirects=True
+        )
+
+        assert rv.status_code == 403
+
+
+def test_get_department_ranks_with_inactive_department_works_for_department_ac(mockdata, client, session):
+    with current_app.test_request_context():
+        login_ac(client)
+        department = Department.query.filter_by(id=AC_DEPT).one()
+        department.is_active = False
+        rv = client.get(
+            url_for('main.get_dept_ranks', department_id=department.id),
+            follow_redirects=True
+        )
+        data = json.loads(rv.data.decode('utf-8'))
+        data = [x[1] for x in data]
+        assert 'Not Sure' in data
+
+        assert rv.status_code == 200
+
+
+def test_get_department_ranks_with_inactive_department_fails_for_other_department_ac(mockdata, client, session):
+    with current_app.test_request_context():
+        login_ac(client)
+        department = Department.query.filter_by(is_active=False).one()
+        rv = client.get(
+            url_for('main.get_dept_ranks', department_id=department.id),
+            follow_redirects=True
+        )
+
+        assert rv.status_code == 403
+
+
+def test_get_department_ranks_with_inactive_department_works_for_admin(mockdata, client, session):
+    with current_app.test_request_context():
+        login_admin(client)
+        department = Department.query.filter_by(is_active=False).one()
+        rv = client.get(
+            url_for('main.get_dept_ranks', department_id=department.id),
+            follow_redirects=True
+        )
+        data = json.loads(rv.data.decode('utf-8'))
+        data = [x[1] for x in data]
+        assert 'Not Sure' in data
+
+        assert rv.status_code == 200
+
+
+def test_user_can_only_browse_active_departments(mockdata, client, session):
+    active_depts = Department.query.filter_by(is_active=True).all()
+    with current_app.test_request_context():
+        rv = client.get(
+            url_for('main.browse')
+        )
+        results = rv.data.decode('utf-8')
+        for dept in active_depts:
+            assert dept.name in results
+        assert INACTIVE_DEPT_NAME not in results
+
+
+def test_admin_can_browse_all_departments(mockdata, client, session):
+    depts = Department.query.all()
+    with current_app.test_request_context():
+        login_admin(client)
+        rv = client.get(
+            url_for('main.browse')
+        )
+        results = rv.data.decode('utf-8')
+        for dept in depts:
+            assert dept.name in results
+
+
+def test_area_coordinator_can_browse_their_own_inactive_department(mockdata, client, session):
+    active_depts = Department.query.filter_by(is_active=True).all()
+    with current_app.test_request_context():
+        login_inactive_ac(client)
+        rv = client.get(
+            url_for('main.browse')
+        )
+        results = rv.data.decode('utf-8')
+        assert INACTIVE_DEPT_NAME in results
+        for active_dept in active_depts:
+            assert active_dept.name in results
+
+
+def test_area_coordinator_cannot_browse_other_inactive_departments(mockdata, client, session):
+    active_depts = Department.query.filter_by(is_active=True).all()
+    with current_app.test_request_context():
+        login_ac(client)
+        rv = client.get(
+            url_for('main.browse')
+        )
+        results = rv.data.decode('utf-8')
+        assert INACTIVE_DEPT_NAME not in results
+        for active_dept in active_depts:
+            assert active_dept.name in results
+
+
+def test_user_cannot_access_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        login_user(client)
+        rv = client.get(
+            url_for('main.list_officer', department_id=INACTIVE_DEPT)
+        )
+        assert rv.status_code == 403
+
+
+def test_anonymous_user_cannot_access_inactive_department(mockdata, client, session):
+    inactive_dept = Department.query.filter_by(is_active=False).one()
+    with current_app.test_request_context():
+        rv = client.get(
+            url_for('main.list_officer', department_id=inactive_dept.id)
+        )
+        assert rv.status_code == 403
+
+
+def test_area_coordinator_can_access_their_own_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        login_inactive_ac(client)
+        rv = client.get(
+            url_for('main.list_officer', department_id=INACTIVE_DEPT)
+        )
+        assert rv.status_code == 200
+
+
+def test_area_coordinator_cannot_access_other_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        login_ac(client)
+        rv = client.get(
+            url_for('main.list_officer', department_id=INACTIVE_DEPT)
+        )
+        assert rv.status_code == 403
+
+
+def test_admin_can_access_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        login_admin(client)
+        rv = client.get(
+            url_for('main.list_officer', department_id=INACTIVE_DEPT)
+        )
+        assert rv.status_code == 200
+
+
+def test_user_cannot_view_officer_in_inactive_department(mockdata, client, session):
+    inactive_dept_officer = Officer.query.filter_by(department_id=INACTIVE_DEPT).first()
+    with current_app.test_request_context():
+        login_user(client)
+        rv = client.get(
+            url_for('main.officer_profile', officer_id=inactive_dept_officer.id)
+        )
+        assert rv.status_code == 403
+
+
+def test_anonymous_user_cannot_view_officer_in_inactive_department(mockdata, client, session):
+    inactive_dept_officer = Officer.query.filter_by(department_id=INACTIVE_DEPT).first()
+    with current_app.test_request_context():
+        rv = client.get(
+            url_for('main.officer_profile', officer_id=inactive_dept_officer.id)
+        )
+        assert rv.status_code == 403
+
+
+def test_ac_can_view_officer_in_their_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        officer = Officer.query.filter_by(department_id=INACTIVE_DEPT).first()
+        login_inactive_ac(client)
+        rv = client.get(url_for('main.officer_profile', officer_id=officer.id),
+                        follow_redirects=True)
+        assert rv.status_code == 200
+
+
+def test_ac_cannot_view_officer_in_other_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        officer = Officer.query.filter_by(department_id=INACTIVE_DEPT).first()
+        login_ac(client)
+        rv = client.get(url_for('main.officer_profile', officer_id=officer.id),
+                        follow_redirects=True)
+        assert rv.status_code == 403
+
+
+def test_admin_can_view_officer_in_inactive_department(mockdata, client, session):
+    with current_app.test_request_context():
+        officer = Officer.query.filter_by(department_id=INACTIVE_DEPT).first()
+        login_admin(client)
+        rv = client.get(url_for('main.officer_profile', officer_id=officer.id),
+                        follow_redirects=True)
+        assert rv.status_code == 200

@@ -9,7 +9,7 @@ from wtforms.validators import (DataRequired, AnyOf, NumberRange, Regexp,
                                 Length, Optional, Required, URL, ValidationError)
 from flask_wtf.file import FileField, FileAllowed, FileRequired
 
-from ..utils import unit_choices, dept_choices
+from ..utils import unit_choices, active_dept_choices, all_dept_choices
 from .choices import SUFFIX_CHOICES, GENDER_CHOICES, RACE_CHOICES, STATE_CHOICES, LINK_CHOICES, AGE_CHOICES
 from ..formfields import TimeField
 from ..widgets import BootstrapListWidget, FormFieldWidget
@@ -45,7 +45,7 @@ class FindOfficerForm(Form):
                                                          Length(max=10)])
     unique_internal_identifier = StringField('unique_internal_identifier', default='', validators=[Regexp('\w*'), Length(max=55)])
     dept = QuerySelectField('dept', validators=[DataRequired()],
-                            query_factory=dept_choices, get_label='name')
+                            query_factory=active_dept_choices, get_label='name')
     rank = StringField('rank', default='Not Sure', validators=[Optional()])  # Gets rewritten by Javascript
     race = SelectField('race', default='Not Sure', choices=RACE_CHOICES,
                        validators=[AnyOf(allowed_values(RACE_CHOICES))])
@@ -65,6 +65,11 @@ class FindOfficerForm(Form):
     ])
 
 
+class FindOfficerFormAdmin(FindOfficerForm):
+    dept = QuerySelectField('dept', validators=[DataRequired()],
+                            query_factory=all_dept_choices, get_label='name')
+
+
 class FindOfficerIDForm(Form):
     name = StringField(
         'name', default='', validators=[
@@ -75,7 +80,12 @@ class FindOfficerIDForm(Form):
         'badge', default='', validators=[Regexp('\w*'), Length(max=10)]
     )
     dept = QuerySelectField('dept', validators=[Optional()],
-                            query_factory=dept_choices, get_label='name')
+                            query_factory=active_dept_choices, get_label='name')
+
+
+class FindOfficerIDFormAdmin(FindOfficerForm):
+        dept = QuerySelectField('dept', validators=[Optional()],
+                                query_factory=all_dept_choices, get_label='name')
 
 
 class FaceTag(Form):
@@ -114,27 +124,6 @@ class SalaryForm(Form):
         if not form.data.get('salary') and not form.data.get('overtime_pay'):
             return True
         return super(SalaryForm, form).validate()
-
-    # def process(self, *args, **kwargs):
-        # raise Exception(args[0])
-
-
-class DepartmentForm(Form):
-    name = StringField(
-        'Full name of law enforcement agency, e.g. Chicago Police Department',
-        default='', validators=[Regexp('\w*'), Length(max=255), DataRequired()]
-    )
-    short_name = StringField(
-        'Shortened acronym for law enforcement agency, e.g. CPD',
-        default='', validators=[Regexp('\w*'), Length(max=100), DataRequired()]
-    )
-    jobs = FieldList(StringField('Job', default='', validators=[
-        Regexp('\w*')]), label='Ranks')
-    submit = SubmitField(label='Add')
-
-
-class EditDepartmentForm(DepartmentForm):
-    submit = SubmitField(label='Update')
 
 
 class LinkForm(Form):
@@ -181,7 +170,7 @@ class TextForm(EditTextForm):
 
 class AddOfficerForm(Form):
     department = QuerySelectField('Department', validators=[DataRequired()],
-                                  query_factory=dept_choices, get_label='name')
+                                  query_factory=all_dept_choices, get_label='name')
     first_name = StringField('First name', default='', validators=[
         Regexp('\w*'), Length(max=50), Optional()])
     last_name = StringField('Last name', default='', validators=[
@@ -256,7 +245,7 @@ class EditOfficerForm(Form):
     department = QuerySelectField(
         'Department',
         validators=[Optional()],
-        query_factory=dept_choices,
+        query_factory=all_dept_choices,
         get_label='name')
     links = FieldList(FormField(
         LinkForm,
@@ -273,7 +262,7 @@ class AddUnitForm(Form):
     department = QuerySelectField(
         'Department',
         validators=[Required()],
-        query_factory=dept_choices,
+        query_factory=all_dept_choices,
         get_label='name')
     submit = SubmitField(label='Add')
 
@@ -282,7 +271,15 @@ class AddImageForm(Form):
     department = QuerySelectField(
         'Department',
         validators=[Required()],
-        query_factory=dept_choices,
+        query_factory=active_dept_choices,
+        get_label='name')
+
+
+class AddImageFormAdmin(Form):
+    department = QuerySelectField(
+        'Department',
+        validators=[Required()],
+        query_factory=all_dept_choices,
         get_label='name')
 
 
@@ -356,7 +353,7 @@ class IncidentForm(DateFieldForm):
     department = QuerySelectField(
         'Department <span class="text-danger">*</span>',
         validators=[Required()],
-        query_factory=dept_choices,
+        query_factory=all_dept_choices,
         get_label='name')
     address = FormField(LocationForm)
     officers = FieldList(FormField(
@@ -396,3 +393,26 @@ class BrowseForm(Form):
     max_age = SelectField('maximum age', default=100, choices=AGE_CHOICES,
                           validators=[AnyOf(allowed_values(AGE_CHOICES))])
     submit = SubmitField(label='Submit')
+
+
+class DepartmentForm(Form):
+    name = StringField(
+        'Full name of law enforcement agency, e.g. Chicago Police Department',
+        default='', validators=[Regexp('\w*'), Length(max=255), DataRequired()]
+    )
+    short_name = StringField(
+        'Shortened acronym for law enforcement agency, e.g. CPD',
+        default='', validators=[Regexp('\w*'), Length(max=100), DataRequired()]
+    )
+    jobs = FieldList(StringField('Job', default='', validators=[Regexp('\w*')]), label='Ranks')
+    is_active = BooleanField('Is the department active?')
+    submit = SubmitField(label='Add')
+
+
+class EditDepartmentForm(DepartmentForm):
+    submit = SubmitField(label='Update')
+
+
+class ChangeDepartmentStatusForm(Form):
+    is_active = BooleanField('Is the department active?', false_values={'False', 'false', ''})
+    submit = SubmitField(label='Change department status')

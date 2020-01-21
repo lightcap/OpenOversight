@@ -15,7 +15,7 @@ import tempfile
 from traceback import format_exc
 
 from sqlalchemy import func
-from sqlalchemy.sql.expression import cast
+from sqlalchemy.sql.expression import cast, true
 import imghdr as imghdr
 from flask import current_app, url_for
 from PIL import Image as Pimage
@@ -55,7 +55,11 @@ def unit_choices():
     return db.session.query(Unit).all()
 
 
-def dept_choices():
+def active_dept_choices():
+    return db.session.query(Department).filter_by(is_active=True).all()
+
+
+def all_dept_choices():
     return db.session.query(Department).all()
 
 
@@ -195,6 +199,14 @@ def get_random_image(image_query):
         return image_query[rand]
     else:
         return None
+
+
+def get_random_image_from_active_department():
+    image_query = Image.query.filter_by(contains_cops=True) \
+                       .filter_by(is_tagged=False) \
+                       .join(Image.department) \
+                       .filter(Department.is_active == true())
+    return get_random_image(image_query)
 
 
 def serve_image(filepath):
@@ -337,9 +349,7 @@ def compute_leaderboard_stats(select_top=25):
 
 
 def ac_can_edit_officer(officer, ac):
-    if officer.department_id == ac.ac_department_id:
-        return True
-    return False
+    return officer.department_id == ac.ac_department_id
 
 
 def add_department_query(form, current_user):

@@ -1,12 +1,16 @@
-from mock import patch, Mock, MagicMock
 import os
-import OpenOversight
-from OpenOversight.app.models import Image, Officer, Assignment, Salary
-from OpenOversight.app.commands import bulk_add_officers
-from OpenOversight.app.utils import get_officer
-import pytest
-import pandas as pd
 import uuid
+
+import pandas as pd
+import pytest
+from mock import MagicMock, Mock, patch
+
+import OpenOversight
+from OpenOversight.app.commands import bulk_add_officers
+from OpenOversight.app.models import (Assignment, Department, Image, Officer,
+                                      Salary)
+from OpenOversight.app.utils import (active_dept_choices, all_dept_choices,
+                                     get_officer)
 
 
 # Utils tests
@@ -19,6 +23,16 @@ def test_department_filter(mockdata):
     )
     for element in results.all():
         assert element.department == department
+
+
+def test_active_dept_choices_only_returns_active_departments(mockdata):
+    for dept in active_dept_choices():
+        assert dept.is_active
+
+
+def test_all_dept_choices_returns_all_departments_in_database(mockdata):
+    depts_in_db = Department.query.all()
+    assert len(all_dept_choices()) == len(depts_in_db)
 
 
 def test_race_filter_select_all_black_officers(mockdata):
@@ -267,7 +281,7 @@ def test_csv_missing_badge_and_uid(csvfile):
     assert 'CSV file must include either badge numbers or unique identifiers for officers' in str(exc.value)
 
 
-def test_csv_non_existant_dept_id(csvfile):
+def test_csv_non_existent_dept_id(csvfile):
     df = pd.read_csv(csvfile)
     df['department_id'] = 666
     df.to_csv(csvfile)
