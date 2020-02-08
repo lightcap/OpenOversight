@@ -195,13 +195,11 @@ class AddOfficerForm(Form):
     gender = SelectField('Gender', default='M', choices=GENDER_CHOICES,
                          validators=[AnyOf(allowed_values(GENDER_CHOICES))])
     star_no = StringField('Badge Number', default='', validators=[
-        Regexp('\\w*'), Length(max=50)])
     unique_internal_identifier = StringField('Unique Internal Identifier', default='', validators=[Regexp('\\w*'), Length(max=50)])
     job_title = StringField('Job Title')  # Gets rewritten by Javascript
-    unit = QuerySelectField('Unit', validators=[Optional()],
-                            query_factory=unit_choices, get_label='descrip',
-                            allow_blank=True, blank_text=u'None')
-    employment_date = DateField('Employment Date', validators=[Optional()])
+    last_employment_date = DateField('Last Employment Date', validators=[Optional()])
+    last_employment_details = StringField('Last Employment Details', default='', validators=[
+        Regexp(r'\w*'), Length(max=50), Optional()])
     birth_year = IntegerField('Birth Year', validators=[Optional()])
     links = FieldList(FormField(
         LinkForm,
@@ -248,6 +246,9 @@ class EditOfficerForm(Form):
     gender = SelectField('Gender', choices=GENDER_CHOICES, coerce=lambda x: x or None,
                          validators=[AnyOf(allowed_values(GENDER_CHOICES))])
     employment_date = DateField('Employment Date', validators=[Optional()])
+    last_employment_date = DateField('Last Employment Date', validators=[Optional()])
+    last_employment_details = StringField('Last Employment Details', default='', validators=[
+        Regexp(r'\w*'), Length(max=50), Optional()])
     birth_year = IntegerField('Birth Year', validators=[Optional()])
     unique_internal_identifier = StringField('Unique Internal Identifier',
                                              default='',
@@ -395,4 +396,5 @@ class BrowseForm(Form):
                           validators=[AnyOf(allowed_values(AGE_CHOICES))])
     max_age = SelectField('maximum age', default=100, choices=AGE_CHOICES,
                           validators=[AnyOf(allowed_values(AGE_CHOICES))])
+    year = QuerySelectField('year', default='', validators=[Optional()], get_pk=lambda x: x.id)  # query set in view function
     submit = SubmitField(label='Submit')
