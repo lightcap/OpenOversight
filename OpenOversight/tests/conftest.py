@@ -444,7 +444,6 @@ def add_mockdata(session):
 def mockdata(session):
     return add_mockdata(session)
 
-
 @pytest.fixture
 def csvfile(mockdata, tmp_path, request):
     csv_path = tmp_path / "dept1.csv"
